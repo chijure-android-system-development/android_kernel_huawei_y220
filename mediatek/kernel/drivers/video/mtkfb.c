@@ -51,6 +51,7 @@ static u32 MTK_FB_XRES  = 0;
 static u32 MTK_FB_YRES  = 0;
 static u32 MTK_FB_BPP   = 0;
 static u32 MTK_FB_PAGES = 0;
+static unsigned long mtkfb_fb_res_size;
 static u32 fb_xres_update = 0;
 static u32 fb_yres_update = 0;
 #define ALIGN_TO(x, n)  \
@@ -1208,6 +1209,18 @@ static void set_fb_fix(struct mtkfb_device *fbdev)
     fix->accel       = FB_ACCEL_NONE;
     fix->line_length = ALIGN_TO(var->xres_virtual, 32) * var->bits_per_pixel / 8;
     fix->smem_len    = fbdev->fb_size_in_byte;
+    /*
+     * gralloc.mt6572 mmaps PAGE_ALIGN(line_length * yres_virtual) and
+     * rejects the device when smem_len is 0 or the map is larger than it.
+     * The reserved window is larger than the 2-page buffer; publish enough.
+     */
+    if (fix->line_length && var->yres_virtual &&
+        (unsigned long)fix->line_length * var->yres_virtual > fix->smem_len &&
+        mtkfb_fb_res_size >=
+            (unsigned long)fix->line_length * var->yres_virtual) {
+        fix->smem_len = fix->line_length * var->yres_virtual;
+        fbdev->fb_size_in_byte = fix->smem_len;
+    }
     fix->smem_start  = fbdev->fb_pa_base;
 
     fix->xpanstep = 0;
@@ -1265,20 +1278,26 @@ static int mtkfb_check_var(struct fb_var_screeninfo *var, struct fb_info *fbi)
         var->xres_virtual = var->xres;
     if (var->yres_virtual < var->yres)
         var->yres_virtual = var->yres;
-    
-    max_frame_size = fbdev->fb_size_in_byte;
-    line_size = var->xres_virtual * bpp / 8;
 
-    if (line_size * var->yres_virtual > max_frame_size) {
-        /* Try to keep yres_virtual first */
-        line_size = max_frame_size / var->yres_virtual;
-        var->xres_virtual = line_size * 8 / bpp;
-        if (var->xres_virtual < var->xres) {
-            /* Still doesn't fit. Shrink yres_virtual too */
-            var->xres_virtual = var->xres;
-            line_size = var->xres * bpp / 8;
+    max_frame_size = fbdev->fb_size_in_byte;
+    if (!max_frame_size)
+        max_frame_size = mtkfb_fb_res_size;
+    /* Same pitch set_fb_fix publishes. An unaligned line under-counts and
+     * gralloc then mmaps past smem_len. */
+    line_size = ALIGN_TO(var->xres_virtual, 32) * bpp / 8;
+
+    /* Stock gralloc asks for two buffers (yres_virtual = yres * 2). */
+    if (var->yres && line_size && var->yres_virtual < var->yres * 2 &&
+        line_size * var->yres * 2 <= max_frame_size)
+        var->yres_virtual = var->yres * 2;
+
+    if (line_size && line_size * var->yres_virtual > max_frame_size) {
+        var->xres_virtual = var->xres;
+        line_size = ALIGN_TO(var->xres_virtual, 32) * bpp / 8;
+        if (line_size)
             var->yres_virtual = max_frame_size / line_size;
-        }
+        if (var->yres_virtual < var->yres)
+            var->yres_virtual = var->yres;
     }
     if (var->xres + var->xoffset > var->xres_virtual)
         var->xoffset = var->xres_virtual - var->xres;
@@ -1319,18 +1338,19 @@ static int mtkfb_check_var(struct fb_var_screeninfo *var, struct fb_info *fbi)
 
     var->activate = FB_ACTIVATE_NOW;
 
-    var->height    = UINT_MAX;
-    var->width     = UINT_MAX;
+    /* 0 makes gralloc take the lcd-density path. UINT_MAX is not a mode. */
+    var->height    = 0;
+    var->width     = 0;
     var->grayscale = 0;
     var->nonstd    = 0;
 
-    var->pixclock     = UINT_MAX;
-    var->left_margin  = UINT_MAX;
-    var->right_margin = UINT_MAX;
-    var->upper_margin = UINT_MAX;
-    var->lower_margin = UINT_MAX;
-    var->hsync_len    = UINT_MAX;
-    var->vsync_len    = UINT_MAX;
+    var->pixclock     = 0;
+    var->left_margin  = 0;
+    var->right_margin = 0;
+    var->upper_margin = 0;
+    var->lower_margin = 0;
+    var->hsync_len    = 0;
+    var->vsync_len    = 0;
 
     var->vmode = FB_VMODE_NONINTERLACED;
     var->sync  = 0;
@@ -1396,15 +1416,13 @@ static int mtkfb_set_par(struct fb_info *fbi)
         return -1;
     }
 
-    // If the framebuffer format is NOT changed, nothing to do
-    //
+    /* Refresh pitch/smem even when the pixel format stays ARGB8888.
+     * gralloc's FBIOPUT only changes yres_virtual and the offsets. */
+    set_fb_fix(fbdev);
+
     if (fb_layer.src_fmt == fbdev->layer_format[FB_LAYER]) {
         goto Done;
     }
-
-    // else, begin change display mode
-    //    
-    set_fb_fix(fbdev);
 
     fb_layer.layer_id = FB_LAYER;
     fb_layer.layer_enable = 1;
@@ -3114,20 +3132,13 @@ static int mtkfb_fbinfo_init(struct fb_info *info)
     var.xres_virtual = MTK_FB_XRESV;
     var.yres_virtual = MTK_FB_YRESV;
 
-#if defined(CONFIG_MT6572_FPGA)
+    /* gralloc.mt6572 requests ARGB8888, red at bit 16, two buffers. */
     var.bits_per_pixel = 32;
 
     var.transp.offset   = 24; var.transp.length   = 8;
     var.red.offset   = 16; var.red.length   = 8;
     var.green.offset =  8; var.green.length = 8;
     var.blue.offset  =  0; var.blue.length  = 8;
-#else
-    var.bits_per_pixel = 16;
-
-    var.red.offset   = 11; var.red.length   = 5;
-    var.green.offset =  5; var.green.length = 6;
-    var.blue.offset  =  0; var.blue.length  = 5;
-#endif
     var.width  = DISP_GetActiveWidth();
     var.height = DISP_GetActiveHeight();
 
@@ -3576,6 +3587,19 @@ static int mtkfb_probe(struct device *dev)
     MTK_FB_BPP   = DISP_GetScreenBpp();
     MTK_FB_PAGES = DISP_GetPages();
 
+    if (MTK_FB_XRES == 0 || MTK_FB_YRES == 0) {
+        MTK_FB_XRES = 320;
+        MTK_FB_YRES = 480;
+        fb_xres_update = MTK_FB_XRES;
+        fb_yres_update = MTK_FB_YRES;
+        printk("[MTKFB] panel size missing, using %ux%u\n",
+               MTK_FB_XRES, MTK_FB_YRES);
+    }
+    if (MTK_FB_BPP != 32)
+        MTK_FB_BPP = 32;
+    if (MTK_FB_PAGES < 2)
+        MTK_FB_PAGES = 2;
+
 
     init_waitqueue_head(&screen_update_wq);
 
@@ -3650,6 +3674,14 @@ static int mtkfb_probe(struct device *dev)
     fbdev->fb_size_in_byte = MTK_FB_SIZEV;
     {
         struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+
+        mtkfb_fb_res_size = res->end - res->start + 1;
+        if (fbdev->fb_size_in_byte == 0 ||
+            fbdev->fb_size_in_byte > mtkfb_fb_res_size)
+            fbdev->fb_size_in_byte = mtkfb_fb_res_size;
+        printk("[MTKFB] size=%lu res=%lu pages=%u bpp=%u\n",
+               fbdev->fb_size_in_byte, mtkfb_fb_res_size,
+               MTK_FB_PAGES, MTK_FB_BPP);
 
         fbdev->fb_pa_base = res->start;
         fbdev->fb_va_base = ioremap_nocache(res->start, res->end - res->start + 1);

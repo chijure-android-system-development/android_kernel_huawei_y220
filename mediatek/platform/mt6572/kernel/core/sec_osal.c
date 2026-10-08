@@ -342,7 +342,8 @@ long osal_is_err(int fp_id)
         return err;
     }    
     
-    osal_assert(0);   
+    /* fp_id 0 is OSAL_FILE_NULL: open failed. That is an error,
+     * not a reason to BUG the whole kernel (sbchk hits this). */
     return 1;
 }
 

@@ -28,6 +28,8 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/composite.h>
 #include <linux/usb/gadget.h>
+#include <linux/miscdevice.h>
+#include <linux/switch.h>
 
 /* Add for HW/SW connect */
 #include <mach/mtk_musb.h>
@@ -131,6 +133,13 @@ struct android_dev {
 
 static struct class *android_class;
 static struct android_dev *_android_dev;
+
+/* Stock GB userspace reads these switch nodes. It never writes
+ * /sys/class/android_usb, which this gadget otherwise uses. */
+static struct switch_dev usb_connected_sw = { .name = "usb_connected" };
+static struct switch_dev usb_config_sw = { .name = "usb_configuration" };
+static struct switch_dev usb_hwconnected_sw = { .name = "usb_hwconnected" };
+static int legacy_switches;
 static int android_bind_config(struct usb_configuration *c);
 static void android_unbind_config(struct usb_configuration *c);
 
@@ -201,6 +210,7 @@ static void android_work(struct work_struct *data)
 	unsigned long flags;
 	/* Add for HW/SW connect */
 	bool is_hwconnected = true;
+	int sw_on, sw_cfg;
 
 	/* patch for ALPS00345130, if the disconnect followed by hw_disconnect, then the hw_disconnect
 	will not notify the UsbDeviceManager due to that musb->g.speed == USB_SPEED_UNKNOWN*/
@@ -243,6 +253,8 @@ static void android_work(struct work_struct *data)
 	}
 
 	dev->sw_connected = dev->connected;
+	sw_on = dev->connected;
+	sw_cfg = cdev->config ? 1 : 0;
 
 	if (dev->rezero_cmd == 1) {
 		uevent_envp_cdrom = rezero_event;
@@ -253,6 +265,12 @@ static void android_work(struct work_struct *data)
 	}
 
 	spin_unlock_irqrestore(&cdev->lock, flags);
+
+	if (legacy_switches) {
+		switch_set_state(&usb_hwconnected_sw, is_hwconnected);
+		switch_set_state(&usb_connected_sw, sw_on);
+		switch_set_state(&usb_config_sw, sw_cfg);
+	}
 
 	if (uevent_envp) {
 		kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE, uevent_envp);
@@ -2048,6 +2066,160 @@ static int android_create_device(struct android_dev *dev)
 }
 
 
+/* Gingerbread stock looks for /sys/class/usb_composite/<func>/enable
+ * and opens /dev/android_adb_enable to pull the gadget up. */
+struct legacy_func {
+	const char *sysfs_name;
+	const char *function_name;
+	int enabled;
+	struct device *dev;
+};
+
+static struct legacy_func legacy_funcs[] = {
+	{ "adb", "adb", 0 },
+	{ "usb_mass_storage", "mass_storage", 0 },
+	{ "acm", "acm", 0 },
+	{ "rndis", "rndis", 0 },
+};
+
+static struct class *legacy_composite_class;
+
+static void legacy_apply_adb(struct android_dev *dev)
+{
+	struct legacy_func *adb = NULL;
+	int i;
+
+	if (!dev || !dev->cdev)
+		return;
+
+	for (i = 0; i < ARRAY_SIZE(legacy_funcs); i++) {
+		if (!strcmp(legacy_funcs[i].function_name, "adb")) {
+			adb = &legacy_funcs[i];
+			break;
+		}
+	}
+	if (!adb)
+		return;
+
+	mutex_lock(&dev->mutex);
+	if (adb->enabled && !dev->enabled) {
+		INIT_LIST_HEAD(&dev->enabled_functions);
+		if (android_enable_function(dev, "adb")) {
+			mutex_unlock(&dev->mutex);
+			return;
+		}
+		device_desc.idVendor = cpu_to_le16(0x12d1);
+		device_desc.idProduct = cpu_to_le16(0x2351);
+		strlcpy(serial_string, "Y220-U05", sizeof(serial_string));
+		dev->cdev->desc.idVendor = device_desc.idVendor;
+		dev->cdev->desc.idProduct = device_desc.idProduct;
+		dev->cdev->desc.bcdDevice = device_desc.bcdDevice;
+		dev->cdev->desc.bDeviceClass = device_desc.bDeviceClass;
+		dev->cdev->desc.bDeviceSubClass = device_desc.bDeviceSubClass;
+		dev->cdev->desc.bDeviceProtocol = device_desc.bDeviceProtocol;
+		dev->cdev->desc.iSerialNumber = device_desc.iSerialNumber;
+		android_enable(dev);
+		dev->enabled = true;
+		pr_info("android_usb: legacy adb pullup 12d1:2351\n");
+	} else if (!adb->enabled && dev->enabled) {
+		android_disable(dev);
+		dev->enabled = false;
+		pr_info("android_usb: legacy adb disconnect\n");
+	}
+	mutex_unlock(&dev->mutex);
+}
+
+static ssize_t legacy_enable_show(struct device *pdev,
+		struct device_attribute *attr, char *buf)
+{
+	struct legacy_func *lf = dev_get_drvdata(pdev);
+
+	return sprintf(buf, "%d\n", lf->enabled);
+}
+
+static ssize_t legacy_enable_store(struct device *pdev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct legacy_func *lf = dev_get_drvdata(pdev);
+	int value;
+
+	if (sscanf(buf, "%d", &value) != 1)
+		return -EINVAL;
+	lf->enabled = !!value;
+	/* Only adb is bound. mass_storage/acm/rndis stay visible so
+	 * vold and UsbService find the nodes, but binding them without
+	 * a LUN drops the whole gadget. */
+	if (!strcmp(lf->function_name, "adb"))
+		legacy_apply_adb(_android_dev);
+	return size;
+}
+
+static struct device_attribute dev_attr_legacy_enable =
+	__ATTR(enable, S_IRUGO | S_IWUSR, legacy_enable_show, legacy_enable_store);
+
+static int adb_enable_open(struct inode *ip, struct file *fp)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(legacy_funcs); i++) {
+		if (!strcmp(legacy_funcs[i].function_name, "adb"))
+			legacy_funcs[i].enabled = 1;
+	}
+	legacy_apply_adb(_android_dev);
+	return 0;
+}
+
+static const struct file_operations adb_enable_fops = {
+	.owner = THIS_MODULE,
+	.open = adb_enable_open,
+};
+
+static struct miscdevice adb_enable_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "android_adb_enable",
+	.fops = &adb_enable_fops,
+};
+
+static void legacy_usb_nodes_create(void)
+{
+	int i, err;
+
+	if (!switch_dev_register(&usb_connected_sw) &&
+	    !switch_dev_register(&usb_config_sw) &&
+	    !switch_dev_register(&usb_hwconnected_sw))
+		legacy_switches = 1;
+	else
+		pr_err("android_usb: switch register failed\n");
+
+	legacy_composite_class = class_create(THIS_MODULE, "usb_composite");
+	if (IS_ERR(legacy_composite_class)) {
+		pr_err("android_usb: usb_composite class failed\n");
+		legacy_composite_class = NULL;
+	} else {
+		for (i = 0; i < ARRAY_SIZE(legacy_funcs); i++) {
+			legacy_funcs[i].dev = device_create(
+				legacy_composite_class, NULL,
+				MKDEV(0, 20 + i), &legacy_funcs[i],
+				legacy_funcs[i].sysfs_name);
+			if (IS_ERR(legacy_funcs[i].dev)) {
+				pr_err("android_usb: %s device failed\n",
+					legacy_funcs[i].sysfs_name);
+				legacy_funcs[i].dev = NULL;
+				continue;
+			}
+			err = device_create_file(legacy_funcs[i].dev,
+					&dev_attr_legacy_enable);
+			if (err)
+				pr_err("android_usb: %s enable failed\n",
+					legacy_funcs[i].sysfs_name);
+		}
+	}
+
+	err = misc_register(&adb_enable_device);
+	if (err)
+		pr_err("android_usb: android_adb_enable failed %d\n", err);
+}
+
 static int __init init(void)
 {
 	struct android_dev *dev;
@@ -2082,7 +2254,10 @@ static int __init init(void)
 
 	pr_info("android usb init %s\r\n", android_usb_driver.name);
 
-	return usb_composite_probe(&android_usb_driver, android_bind);
+	err = usb_composite_probe(&android_usb_driver, android_bind);
+	if (!err)
+		legacy_usb_nodes_create();
+	return err;
 }
 late_initcall(init);
 

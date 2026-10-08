@@ -113,7 +113,7 @@ extern struct ump_dev device;
 
 _mali_osk_errcode_t ump_kernel_constructor(void);
 void ump_kernel_destructor(void);
-int map_errcode( _mali_osk_errcode_t err );
+int ump_map_errcode( _mali_osk_errcode_t err );
 
 /**
  * variables from user space cannot be dereferenced from kernel space; tagging them

@@ -116,7 +116,7 @@ static int ump_initialize_module(void)
 	if (_MALI_OSK_ERR_OK != err)
 	{
 		MSG_ERR(("UMP device driver init failed\n"));
-		return map_errcode(err);
+		return ump_map_errcode(err);
 	}
 
 	MSG(("UMP device driver %s loaded\n", SVN_REV_STRING));
@@ -274,7 +274,7 @@ static int ump_file_open(struct inode *inode, struct file *filp)
 	if( _MALI_OSK_ERR_OK != err )
 	{
 		MSG_ERR(("Ump failed to open a new session\n"));
-		return map_errcode( err );
+		return ump_map_errcode( err );
 	}
 
 	filp->private_data = (void*)session_data;
@@ -295,7 +295,7 @@ static int ump_file_release(struct inode *inode, struct file *filp)
 	err = _ump_ukk_close((void**) &filp->private_data );
 	if( _MALI_OSK_ERR_OK != err )
 	{
-		return map_errcode( err );
+		return ump_map_errcode( err );
 	}
 
 	return 0;  /* success */
@@ -377,7 +377,7 @@ static int ump_file_ioctl(struct inode *inode, struct file *filp, unsigned int c
 	return err;
 }
 
-int map_errcode( _mali_osk_errcode_t err )
+int ump_map_errcode( _mali_osk_errcode_t err )
 {
     switch(err)
     {
@@ -434,7 +434,7 @@ static int ump_file_mmap(struct file * filp, struct vm_area_struct * vma)
 	if ( _MALI_OSK_ERR_OK != err)
 	{
 		MSG_ERR(("_ump_ukk_map_mem() failed in function ump_file_mmap()"));
-		return map_errcode( err );
+		return ump_map_errcode( err );
 	}
 
 	return 0; /* success */

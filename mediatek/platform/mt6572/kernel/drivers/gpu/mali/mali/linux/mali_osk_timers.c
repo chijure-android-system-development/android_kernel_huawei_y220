@@ -73,5 +73,9 @@ void _mali_osk_timer_setcallback( _mali_osk_timer_t *tim, _mali_osk_timer_callba
 void _mali_osk_timer_term( _mali_osk_timer_t *tim )
 {
     MALI_DEBUG_ASSERT_POINTER(tim);
+    /* ref_dec arms this timer, then a failed probe frees it.
+     * Without the delete the callback runs later and prefetches
+     * whatever landed in the freed timer_list.function. */
+    del_timer_sync(&(tim->timer));
     kfree(tim);
 }

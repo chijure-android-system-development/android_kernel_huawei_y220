@@ -284,8 +284,6 @@ static int mt_setup_gpufreqs_table(struct mt_gpufreq_info *gpufreqs, int num)
 ******************************/
 int mt_gpufreq_state_set(int enabled)
 {
-    ktime_t ktime = ktime_set(mt_gpufreq_sample_s, mt_gpufreq_sample_ns);
-
     if (enabled)
     {
         if (!mt_gpufreq_pause)
@@ -306,8 +304,13 @@ int mt_gpufreq_state_set(int enabled)
         if (g_gpufreq_dvfs_disable_count <= 0)
         {
             mt_gpufreq_pause = false;
-            hrtimer_start(&mt_gpufreq_timer, ktime, HRTIMER_MODE_REL);
-
+            /*
+             * Do not hrtimer_start(). lock_hrtimer_base() spins in
+             * cpu_relax() while timer->base is NULL, and
+             * PerfService.nativePerfBoostDisable holds the
+             * ActivityManager lock across this write. The pause
+             * flag already stops the sampler from re-arming.
+             */
         }
         else
         {
@@ -328,8 +331,14 @@ int mt_gpufreq_state_set(int enabled)
             return 0;
         }
         mt_gpufreq_pause = true;
-        mt_gpufreq_target(g_gpufreq_max_id);
-        hrtimer_cancel(&mt_gpufreq_timer);
+        /*
+         * Do not retune WHPLL and do not hrtimer_cancel().
+         * mt_gpufreq_target() does not return, and hrtimer_cancel()
+         * then spins because the timer callback stays running.
+         * PerfService.nativePerfBoostEnable holds the ActivityManager
+         * lock across this write, so either call leaves the launcher
+         * unstarted. The pause flag stops the sampler from re-arming.
+         */
     }
 
     return 0;

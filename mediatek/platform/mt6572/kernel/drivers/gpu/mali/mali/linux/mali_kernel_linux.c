@@ -98,6 +98,7 @@ struct platform_device *mali_platform_device = NULL;
 
 /* This driver only supports one Mali device, and this variable stores the exposed misc device (/dev/mali) */
 static struct miscdevice mali_miscdevice = { 0, };
+static int mali_hw_up;
 
 static int mali_miscdevice_register(struct platform_device *pdev);
 static void mali_miscdevice_unregister(void);
@@ -277,6 +278,7 @@ static int mali_probe(struct platform_device *pdev)
 	}
 
 	mali_platform_device = pdev;
+	mali_hw_up = 0;
 
 	if (_MALI_OSK_ERR_OK == _mali_osk_wq_init())
 	{
@@ -291,6 +293,7 @@ static int mali_probe(struct platform_device *pdev)
 				err = mali_sysfs_register(mali_dev_name);
 				if (0 == err)
 				{
+					mali_hw_up = 1;
 					MALI_DEBUG_PRINT(2, ("mali_probe(): Successfully initialized driver for platform device %s\n", pdev->name));
 					return 0;
 				}
@@ -308,7 +311,16 @@ static int mali_probe(struct platform_device *pdev)
 		}
 		else
 		{
+			/* Subsystems failed (MFG clock/domain). Still publish
+			 * /dev/mali so gralloc can open it; mali_open returns
+			 * -ENODEV until the GPU actually came up. */
 			MALI_PRINT_ERROR(("mali_probe(): Failed to initialize Mali device driver."));
+			err = mali_miscdevice_register(pdev);
+			if (0 == err)
+			{
+				return 0;
+			}
+			MALI_PRINT_ERROR(("mali_probe(): failed to register Mali misc device."));
 		}
 		_mali_osk_wq_term();
 	}
@@ -432,6 +444,11 @@ static int mali_open(struct inode *inode, struct file *filp)
 	if (mali_miscdevice.minor != iminor(inode))
 	{
 		MALI_PRINT_ERROR(("mali_open() Minor does not match\n"));
+		return -ENODEV;
+	}
+
+	if (!mali_hw_up)
+	{
 		return -ENODEV;
 	}
 

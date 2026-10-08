@@ -2118,7 +2118,7 @@ kal_int32 battery_meter_get_battery_current(void)
 
 	if(g_auxadc_solution == 1)
 		val = oam_i_2;
- 	else
+	else if (battery_meter_ctrl)
 	   	ret = battery_meter_ctrl(BATTERY_METER_CMD_GET_HW_FG_CURRENT, &val);
 
     return val;
@@ -2131,7 +2131,7 @@ kal_bool battery_meter_get_battery_current_sign(void)
 
 	if(g_auxadc_solution == 1)
 		val=0;	//discharging
-	else
+	else if (battery_meter_ctrl)
     	ret = battery_meter_ctrl(BATTERY_METER_CMD_GET_HW_FG_CURRENT_SIGN, &val);
 
     return val;
@@ -2144,7 +2144,7 @@ kal_int32 battery_meter_get_car(void)
 
 	if(g_auxadc_solution == 1)
     	val = oam_car_2;
-	else
+	else if (battery_meter_ctrl)
 		ret = battery_meter_ctrl(BATTERY_METER_CMD_GET_HW_FG_CAR, &val);
 
     return val;

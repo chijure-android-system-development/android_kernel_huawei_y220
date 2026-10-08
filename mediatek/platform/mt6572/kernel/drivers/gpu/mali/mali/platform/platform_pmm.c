@@ -86,6 +86,16 @@ int mali_platform_power_mode_change(mali_power_mode power_mode)
 
          if (atomic_read((atomic_t *)&bPoweroff) == 1)
          {
+            /* clkmux_sel and enable_clock branch through ops
+             * function pointers. If SYS_MFG is still down those
+             * register touches fault, product detection fails,
+             * and the PM timer is freed while it is still armed. */
+            if (enable_subsys(SYS_MFG, "G3D_MFG") != 0)
+            {
+               MALI_PRINT_ERROR(("MFG subsystem not ready, leaving GPU clocks off\n"));
+               return -ENODEV;
+            }
+
             MALI_DEBUG_PRINT(2,("[+]MFG enable_clock \n"));
             mfg_pwr_lock(flags);
             if (!clock_is_on(MT_CG_MFG_PDN_BG3D_SW_CG))
@@ -136,4 +146,6 @@ int mali_platform_power_mode_change(mali_power_mode power_mode)
 
          break;
    }
+
+   return 0;
 }

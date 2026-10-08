@@ -614,25 +614,17 @@ static ssize_t store_cpu_num_base(struct kobject *a, struct attribute *b,
 				    const char *buf, size_t count)
 {
 	unsigned int input;
-	bool raise_freq = false;
 	int ret;
-	struct cpufreq_policy *policy;
-	
-	policy = cpufreq_cpu_get(0);
-	ret = sscanf(buf, "%u", &input);
 
-	dbs_tuners_ins.cpu_num_base = input;
-	mutex_lock(&hp_mutex);
-	if (num_online_cpus() < dbs_tuners_ins.cpu_num_base && num_online_cpus() < dbs_tuners_ins.cpu_num_limit) {
-		raise_freq = true;
-		g_next_hp_action = 1;
-		schedule_delayed_work_on(0, &hp_work, 0);
-	}
-	mutex_unlock(&hp_mutex);
-	
-	if(raise_freq == true)
-		dbs_freq_increase(policy, policy->max);
-	
+	ret = sscanf(buf, "%u", &input);
+	if (ret == 1)
+		dbs_tuners_ins.cpu_num_base = input;
+	/*
+	 * Do not schedule hotplug or call dbs_freq_increase().
+	 * mt_cpufreq_target() takes mt_cpufreq_lock with IRQs off and
+	 * can sit in the PLL path. PerfService calls this write while
+	 * holding the ActivityManager lock.
+	 */
 	return count;
 }
 

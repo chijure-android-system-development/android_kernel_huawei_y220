@@ -167,6 +167,17 @@ _mali_osk_errcode_t _ump_ukk_allocate( _ump_uk_allocate_s *user_interaction )
 	new_allocation->size_bytes = UMP_SIZE_ALIGN(user_interaction->size); /* Page align the size */
 	new_allocation->lock_usage = UMP_NOT_LOCKED;
 
+	/* backend->allocate is an indirect call. A missing backend
+	 * must fail the ioctl instead of prefetch-aborting. */
+	if (NULL == device.backend || NULL == device.backend->allocate)
+	{
+		ump_descriptor_mapping_free(device.secure_id_map, map_id);
+		_mali_osk_lock_signal(device.secure_id_map_lock, _MALI_OSK_LOCKMODE_RW);
+		_mali_osk_free(new_allocation);
+		_mali_osk_free(session_memory_element);
+		return _MALI_OSK_ERR_FAULT;
+	}
+
 	/* Now, ask the active memory backend to do the actual memory allocation */
 	if (!device.backend->allocate( device.backend->ctx, new_allocation ) )
 	{

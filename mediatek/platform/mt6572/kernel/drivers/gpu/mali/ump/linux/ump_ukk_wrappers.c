@@ -47,7 +47,7 @@ int ump_get_api_version_wrapper(u32 __user * argument, struct ump_session_data *
 	if( _MALI_OSK_ERR_OK != err )
 	{
 		MSG_ERR(("_ump_uku_get_api_version() failed in ump_ioctl_get_api_version()\n"));
-		return map_errcode(err);
+		return ump_map_errcode(err);
 	}
 
 	version_info.ctx = NULL;
@@ -90,7 +90,7 @@ int ump_release_wrapper(u32 __user * argument, struct ump_session_data  * sessio
 	if( _MALI_OSK_ERR_OK != err )
 	{
 		MSG_ERR(("_ump_ukk_release() failed in ump_ioctl_release()\n"));
-		return map_errcode(err);
+		return ump_map_errcode(err);
 	}
 
 
@@ -123,7 +123,7 @@ int ump_size_get_wrapper(u32 __user * argument, struct ump_session_data  * sessi
 	if( _MALI_OSK_ERR_OK != err )
 	{
 		MSG_ERR(("_ump_ukk_size_get() failed in ump_ioctl_size_get()\n"));
-		return map_errcode(err);
+		return ump_map_errcode(err);
 	}
 
 	user_interaction.ctx = NULL;

@@ -43,7 +43,12 @@ _mali_osk_errcode_t _mali_osk_pm_delete_callback_timer(void)
 }
 
 void _mali_pm_callback(void *arg)
-{   
+{
+   if (NULL == pm_lock)
+   {
+      return;
+   }
+
    MALI_DEBUG_PRINT(2, ("_mali_pm_callback (%u)\n", _mali_osk_atomic_read(&mali_pm_ref_count)));
     
    _mali_osk_lock_wait(pm_lock, _MALI_OSK_LOCKMODE_RW);   	
@@ -73,8 +78,16 @@ void _mali_osk_pm_dev_enable(void) /* @@@@ todo: change to init of some kind.. o
 void _mali_osk_pm_dev_disable(void) /* @@@@ todo: change to term of some kind */
 {
 	_mali_osk_atomic_term(&mali_pm_ref_count);
-	_mali_osk_timer_term(pm_timer);
-	_mali_osk_lock_term(pm_lock);
+	if (NULL != pm_timer)
+	{
+		_mali_osk_timer_term(pm_timer);
+		pm_timer = NULL;
+	}
+	if (NULL != pm_lock)
+	{
+		_mali_osk_lock_term(pm_lock);
+		pm_lock = NULL;
+	}
 }
 
 

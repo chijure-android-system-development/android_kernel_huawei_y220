@@ -49,7 +49,7 @@ int ump_allocate_wrapper(u32 __user * argument, struct ump_session_data  * sessi
 	if( _MALI_OSK_ERR_OK != err )
 	{
 		DBG_MSG(1, ("_ump_ukk_allocate() failed in ump_ioctl_allocate()\n"));
-		return map_errcode(err);
+		return ump_map_errcode(err);
 	}
 	user_interaction.ctx = NULL;
 
