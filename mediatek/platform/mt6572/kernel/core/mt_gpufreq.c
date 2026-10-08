@@ -175,14 +175,7 @@ static int mt_gpufreq_keep_max_freq()
 //Todo: this function should be provided by ME team
 unsigned int mt_get_gpu_loading()
 {
-    unsigned int loading = gpu_get_current_utilization();
-    if(loading > 100){
-        dprintk("loading > 100%: loading = %d\n", loading);
-        return 100;
-    }
-    else{
-        return loading;
-    }
+    return 0;
 }
 
 /*****************************************************************

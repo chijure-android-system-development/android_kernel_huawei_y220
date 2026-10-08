@@ -12,7 +12,7 @@
 #include <asm/pgtable.h>
 #include <mach/fiq_smp_call.h>
 
-#include "../../../../kernel/drivers/staging/android/logger.h"
+#include "../../../../../drivers/staging/android/logger.h"
 
 extern void __inner_flush_dcache_all(void);
 extern void __inner_flush_dcache_L1(void);

@@ -133,7 +133,7 @@ static u8 g_dwiic_info_data[1024];   // Buffer for info data
 static void msg2133_device_power_on()
 {
 	#ifdef TPD_POWER_SOURCE_CUSTOM
-	hwPowerOn(TPD_POWER_SOURCE_CUSTOM, VOL_2800, "TP");
+	hwPowerOn(TPD_POWER_SOURCE_CUSTOM, VOL_3300, "TP");
 #else
 	hwPowerOn(MT65XX_POWER_LDO_VGP2, VOL_2800, "TP");
 #endif
@@ -2182,10 +2182,11 @@ void msg2133_init_class()
    INIT_WORK( &msg21xx_wq, touch_event_handler );
 //power on, need confirm with SA
 #ifdef TPD_POWER_SOURCE_CUSTOM
-	hwPowerOn(TPD_POWER_SOURCE_CUSTOM, VOL_2800, "TP");
+	hwPowerOn(TPD_POWER_SOURCE_CUSTOM, VOL_3300, "TP");
 #else
 	hwPowerOn(MT65XX_POWER_LDO_VGP2, VOL_2800, "TP");
 #endif
+	hwPowerOn(MT6323_POWER_LDO_VMCH, VOL_3300, "TP");
 #ifdef TPD_POWER_SOURCE_1800
 	hwPowerOn(TPD_POWER_SOURCE_1800, VOL_1800, "TP");
 #endif 
@@ -2197,18 +2198,11 @@ void msg2133_init_class()
 	msleep(100);
 #else
 
-	mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
-	mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
-	msleep(10);
-	mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
-    mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ZERO);  
-	msleep(50);
+	mt_set_gpio_mode(GPIO_KPD_KROW0_PIN, GPIO_KPD_KROW0_PIN_M_GPIO);
+	mt_set_gpio_dir(GPIO_KPD_KROW0_PIN, GPIO_DIR_OUT);
+	mt_set_gpio_out(GPIO_KPD_KROW0_PIN, GPIO_OUT_ONE);
+	i2c_client->timing = 100;
 	TPD_DMESG(" msg2133 reset\n");
-	mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
-    mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ONE);
 	msleep(50);
 	
 #endif
@@ -2217,7 +2211,7 @@ void msg2133_init_class()
 	mt_set_gpio_mode(GPIO_CTP_EINT_PIN, GPIO_CTP_EINT_PIN_M_EINT);
     mt_set_gpio_dir(GPIO_CTP_EINT_PIN, GPIO_DIR_IN);
    	mt_set_gpio_pull_enable(GPIO_CTP_EINT_PIN, GPIO_PULL_ENABLE);
-    mt_set_gpio_pull_select(GPIO_CTP_EINT_PIN, GPIO_PULL_DOWN);
+    mt_set_gpio_pull_select(GPIO_CTP_EINT_PIN, GPIO_PULL_UP);
 		
 
     msleep(10);
@@ -2252,10 +2246,13 @@ void msg2133_init_class()
 	 }
 
 	*/
-    if((i2c_smbus_read_i2c_block_data(i2c_client, 0x00, 1, &data))< 0)
 	{
-		TPD_DMESG("I2C transfer error, line: %d\n", __LINE__);
-		return -1; 
+		u8 pkt[4] = { 0x53, 0x00, 0x74, 0x00 };
+		if (i2c_master_send(i2c_client, pkt, 3) < 0 ||
+		    i2c_master_recv(i2c_client, pkt, 4) < 0) {
+			TPD_DMESG("I2C transfer error, line: %d\n", __LINE__);
+			return -1;
+		}
 	}
 	
     tpd_load_status = 1;
@@ -2367,10 +2364,10 @@ void msg2133_init_class()
 	TPD_DMESG("TPD enter sleep\n");
 	mt65xx_eint_mask(CUST_EINT_TOUCH_PANEL_NUM);
 	
-	mt_set_gpio_mode(GPIO_CTP_RST_PIN, GPIO_CTP_RST_PIN_M_GPIO);
-    mt_set_gpio_dir(GPIO_CTP_RST_PIN, GPIO_DIR_OUT);
-    mt_set_gpio_out(GPIO_CTP_RST_PIN, GPIO_OUT_ZERO);  
-	 
+	mt_set_gpio_mode(GPIO_KPD_KROW0_PIN, GPIO_KPD_KROW0_PIN_M_GPIO);
+	mt_set_gpio_dir(GPIO_KPD_KROW0_PIN, GPIO_DIR_OUT);
+	mt_set_gpio_out(GPIO_KPD_KROW0_PIN, GPIO_OUT_ONE);
+
 #ifdef TPD_CLOSE_POWER_IN_SLEEP	
 	hwPowerDown(TPD_POWER_SOURCE,"TP");
 #else
@@ -2395,7 +2392,10 @@ void msg2133_init_class()
  /* called when loaded into kernel */
  static int __init tpd_driver_init(void) {
 	 TPD_DEBUG("MediaTek MSG2133 touch panel driver init\n");
-	   i2c_register_board_info(0, &msg2133_i2c_tpd, 1);
+#ifndef TPD_I2C_NUMBER
+#define TPD_I2C_NUMBER 0
+#endif
+	   i2c_register_board_info(TPD_I2C_NUMBER, &msg2133_i2c_tpd, 1);
 		 if(tpd_driver_add(&tpd_device_driver) < 0)
 			 TPD_DMESG("add MSG2133 driver failed\n");
 	 return 0;

@@ -22,6 +22,7 @@ extern LCM_DRIVER hx8369b_wvga_dsi_vdo_drv;
 extern LCM_DRIVER hx8389b_qhd_dsi_vdo_drv;
 extern LCM_DRIVER hx8369_hvga_lcm_drv;
 extern LCM_DRIVER ili9481_lcm_drv;
+extern LCM_DRIVER ili9488_dbi_lcm_drv;
 extern LCM_DRIVER nt35582_lcm_drv;
 extern LCM_DRIVER s6d0170_lcm_drv;
 extern LCM_DRIVER spfd5461a_lcm_drv;
@@ -262,6 +263,10 @@ LCM_DRIVER* lcm_driver_list[] =
 
 #if defined(ILI9481)
 	&ili9481_lcm_drv,
+#endif
+
+#if defined(ILI9488_DBI)
+	&ili9488_dbi_lcm_drv,
 #endif
 
 #if defined(NT35582)

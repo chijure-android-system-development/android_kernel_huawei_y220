@@ -48,7 +48,6 @@
 #include "epautoconf.c"
 #include "composite.c"
 
-#include "f_audio_source.c"
 #include "f_fs.c"
 #include "f_mass_storage.c"
 #include "u_serial.c"
@@ -56,7 +55,6 @@
 #include "f_acm.c"
 #include "f_adb.c"
 #include "f_mtp.c"
-#include "f_accessory.c"
 #define USB_ETH_RNDIS y
 #include "f_rndis.c"
 #include "rndis.c"
@@ -1358,6 +1356,7 @@ static struct android_usb_function mass_storage_function = {
 };
 
 
+#if 0
 static int accessory_function_init(struct android_usb_function *f,
 					struct usb_composite_dev *cdev)
 {
@@ -1451,6 +1450,7 @@ static struct android_usb_function audio_source_function = {
 	.unbind_config	= audio_source_function_unbind_config,
 	.attributes	= audio_source_function_attributes,
 };
+#endif
 
 static struct android_usb_function *supported_functions[] = {
 	&ffs_function,
@@ -1463,8 +1463,6 @@ static struct android_usb_function *supported_functions[] = {
 	&serial_function,
 	&rndis_function,
 	&mass_storage_function,
-	&accessory_function,
-	&audio_source_function,
 	NULL
 };
 
@@ -1986,12 +1984,6 @@ android_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *c)
 				break;
 		}
 	}
-
-	/* Special case the accessory function.
-	 * It needs to handle control requests before it is enabled.
-	 */
-	if (value < 0)
-		value = acc_ctrlrequest(cdev, c);
 
 	if (value < 0)
 		value = composite_setup(gadget, c);

@@ -254,13 +254,18 @@ BOOL LCD_IsBusy(void)
 
 static void _WaitForLCDEngineComplete(void)
 {
-   do
+   unsigned int i;
+
+   /* Sin este tope el DBI se queda aquí si el panel no completa
+    * la transferencia y el watchdog reinicia a Android. */
+   for (i = 0; i < 2000; i++)
    {
       if ((DISP_REG_GET(&LCD_REG->INT_STATUS)& 0x1) == 0x1)
-      {
-         break;
-      }
-   } while(1);
+         return;
+      mdelay(1);
+   }
+   printk("[WARNING] Wait for LCD engine complete timeout\n");
+   LCD_DumpRegisters();
 }
 
 
