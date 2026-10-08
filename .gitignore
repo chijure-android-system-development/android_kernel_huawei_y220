@@ -45,6 +45,10 @@ modules.builtin
 /Module.markers
 /Module.symvers
 
+# Local build leftovers, not part of the tree
+/Download
+/mediatek-configs
+
 #
 # Debian directory (make deb-pkg)
 #

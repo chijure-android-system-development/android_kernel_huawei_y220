@@ -1,7 +1,18 @@
-export PATH=~/Your_Toolchain_PATH/
-for example /alps/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.6/bin
-Build Command:
-kernel
-======
-1.$cd kernel directory
-2.$TARGET_PRODUCT=lcsh72_we_jb3 MTK_ROOT_CUSTOM=mediatek/custom/ MTK_PATH_SOURCE=mediatek/kernel/ MTK_PATH_PLATFORM=mediatek/platform/mt6572/kernel/ make
+# Huawei Ascend Y220-U05
+
+Linux 3.4.5 kernel for the Huawei Ascend Y220-U05 (HWY220-U).
+
+- Platform: MediaTek MT6572
+- Android: 2.3.6 Gingerbread
+- Stock project: huaqin72_we_b2a_gb3
+- Stock build: C482B206SP05
+- Panel: ILI9488 DBI, 320x480
+- GPU: Mali-400
+
+`lcsh72_we_jb3` is the Longcheer MT6572 Jelly Bean donor this tree was forked from. It is not the Y220. Its panel is a FWVGA DSI part. Build the `y220` project.
+
+```
+./build.sh y220
+```
+
+Toolchain: `arm-linux-androideabi-4.6`.
