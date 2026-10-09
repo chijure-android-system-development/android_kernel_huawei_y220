@@ -52,6 +52,8 @@ void tpd_button_init(void) {
 #endif	
 //    if((tpd->kpd=input_allocate_device())==NULL) return -ENOMEM;
     tpd->kpd=input_allocate_device();
+    if (!tpd->kpd)
+        return;
     /* struct input_dev kpd initialization and registration */
     tpd->kpd->name = TPD_DEVICE "-kpd";
     set_bit(EV_KEY, tpd->kpd->evbit);
@@ -77,6 +79,13 @@ void tpd_button_init(void) {
 
 void tpd_button(unsigned int x, unsigned int y, unsigned int down) {
     int i;
+    /*
+     * The touch IRQ is unmasked before this device exists.
+     * A key packet in that window used to dereference a NULL kpd
+     * and reset the phone.
+     */
+    if (!tpd || !tpd->kpd)
+        return;
     if(down) {
         for(i=0;i<tpd_keycnt;i++) 
 		{

@@ -148,6 +148,7 @@
 #define S5K4E1GA_SENSOR_ID                      0x4E10
 #define S5K4ECGX_SENSOR_ID                      0x4EC0
 #define S5K5CAGX_SENSOR_ID                      0x05ca
+#define GC0329_SENSOR_ID                        0x00c0
 #define S5K8AAYX_MIPI_SENSOR_ID			0x08aa
 #define S5K8AAYX_SENSOR_ID			0x08aa
 
@@ -225,6 +226,7 @@
 #define SENSOR_DRVNAME_OV7675_YUV   "ov7675yuv"
 #define SENSOR_DRVNAME_IMX073_MIPI_RAW   "imx073mipiraw"
 #define SENSOR_DRVNAME_S5K5CAGX_YUV     "s5k5cagxyuv"
+#define SENSOR_DRVNAME_GC0329_YUV       "gc0329yuv"
 #define SENSOR_DRVNAME_SIV120B_YUV    "siv120byuv"
 #define SENSOR_DRVNAME_MT9V113_YUV    "mt9v113yuv"
 #define SENSOR_DRVNAME_HI253_YUV    	"hi253yuv"

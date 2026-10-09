@@ -530,6 +530,15 @@ int disp_path_config_layer(OVL_CONFIG_STRUCT* pOvlConfig)
                      pOvlConfig->alpha);
 
 
+    if (pOvlConfig->layer_en &&
+        pOvlConfig->source == OVL_LAYER_SOURCE_MEM &&
+        pOvlConfig->addr == 0) {
+        printk("[DDP] layer %d enabled with addr 0, leave it off\n",
+               pOvlConfig->layer);
+        OVLLayerSwitch(pOvlConfig->layer, 0);
+        return 0;
+    }
+
     // config overlay
     OVLLayerSwitch(pOvlConfig->layer, pOvlConfig->layer_en);
 

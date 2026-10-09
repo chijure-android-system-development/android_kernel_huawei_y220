@@ -740,11 +740,6 @@ int dumchar_open (struct inode *inode, struct file *filp)
 		if (IS_ERR(fo->act_filp)) {
 			result=PTR_ERR(fo->act_filp);
 			printk( " DumChar: [%s] open %s failed ( %s ).  fo->act_filp=%p!, result=%d\n",current->comm,dev->actname,filp->f_path.dentry->d_name.name,fo->act_filp,result);
-			printk("[dumchar_open] show_stack*************************************\n");
-			show_stack(NULL,NULL);
-			printk("[dumchar_open] BUG_ON*************************************\n");
-			BUG_ON(1);
-			printk("[dumchar_open] ************\n");
 			goto open_fail2;
 		} else {
 			if (!(fo->act_filp->f_op)) {

@@ -1406,6 +1406,15 @@ static int kpd_pdrv_probe(struct platform_device *pdev)
 	mt_set_gpio_pull_enable(95, 0);		
 	mt_set_gpio_pull_select(95, 0);
 #endif
+#ifdef GPIO_KPD_KCOL1_PIN
+	/* Stock Y220 maps keypad column 1 to GPIO108. The donor DCT
+	 * names that ball a camera LDO and leaves it a GPIO output,
+	 * so volume-down never reaches the scanner. */
+	mt_set_gpio_mode(GPIO_KPD_KCOL1_PIN, GPIO_KPD_KCOL1_PIN_M_KCOL);
+	mt_set_gpio_dir(GPIO_KPD_KCOL1_PIN, GPIO_DIR_IN);
+	mt_set_gpio_pull_enable(GPIO_KPD_KCOL1_PIN, GPIO_PULL_ENABLE);
+	mt_set_gpio_pull_select(GPIO_KPD_KCOL1_PIN, GPIO_PULL_UP);
+#endif
 	return 0;
 }
 

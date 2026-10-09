@@ -2088,67 +2088,42 @@ void msg2133_init_class()
 	 
 		TPD_DEBUG(KERN_ERR "[msg2133]--KeyMode:%d, KeyCode:%d, FingerNum =%d \n", touchData.nTouchKeyMode, touchData.nTouchKeyCode, touchData.nFingerNum );
 	 
-		//key...
 		if( touchData.nTouchKeyMode )
 		{
-	    	//key mode change virtual key mode
-			touchData.nFingerNum = 1;
+			/*
+			 * Report the capacitive key on mtk-tpd-kpd. Do not also
+			 * send a finger event: EventHub would turn that into a
+			 * second key via virtualkeys.mtk-tpd.
+			 */
 			if( touchData.nTouchKeyCode == 1 )
-			{
-				//touchkeycode = KEY_MENU;
-				touchData.Point[0].X = 80;
-				touchData.Point[0].Y = 850;
-			}
-			if( touchData.nTouchKeyCode == 2 )
-			{
-				//touchkeycode = KEY_HOMEPAGE ;
-				touchData.Point[0].X = 240;
-				touchData.Point[0].Y = 850;
-
-			}
-			if( touchData.nTouchKeyCode == 4 )
-			{
-				//touchkeycode = KEY_BACK;
-				touchData.Point[0].X = 400;
-				touchData.Point[0].Y = 850;
-
-			}
-			if( touchData.nTouchKeyCode == 8 )
-			{
-				//touchkeycode = KEY_SEARCH;
-				//touchData.Point[0].X = 560;
-				//touchData.Point[0].Y = 850;
-
-			}
-					
+				tpd_button(80, 850, 1);
+			else if( touchData.nTouchKeyCode == 2 )
+				tpd_button(240, 850, 1);
+			else if( touchData.nTouchKeyCode == 4 )
+				tpd_button(400, 850, 1);
 		}
-				//report
+		else if( ( touchData.nFingerNum ) == 0 )
 		{
-	 
-			if( ( touchData.nFingerNum ) == 0 ) //touch end
+			TPD_DEBUG("------DOWN------ \n");
+			TPD_DEBUG(KERN_ERR "[msg2133]---X:%d, Y:%d; \n", touchData.Point[0].X, touchData.Point[0].Y);
+			tpd_button(0, 0, 0);
+			tpd_up(touchData.Point[0].X, touchData.Point[0].Y, 0);
+			input_sync( tpd->dev );
+		}
+		else
+		{
+			for( i = 0; i < ( (int)touchData.nFingerNum ); i++ )
 			{
 				TPD_DEBUG("------DOWN------ \n");
-				TPD_DEBUG(KERN_ERR "[msg2133]---X:%d, Y:%d; \n", touchData.Point[0].X, touchData.Point[0].Y);
-				tpd_up(touchData.Point[0].X, touchData.Point[0].Y, 0);
-				input_sync( tpd->dev );
-			}
-			else //touch on screen
-			{
-	 
-				for( i = 0; i < ( (int)touchData.nFingerNum ); i++ )
-				{
-				    TPD_DEBUG("------DOWN------ \n");
-					tpd_down(touchData.Point[i].X, touchData.Point[i].Y, 1);
-					TPD_DEBUG(KERN_ERR "[msg2133]---X:%d, Y:%d; i=%d \n", touchData.Point[i].X, touchData.Point[i].Y, i);
-				}
-	 
-				input_sync( tpd->dev );
-			}
-		}//end if(touchData->nTouchKeyMode)
-	 
+				tpd_down(touchData.Point[i].X, touchData.Point[i].Y, 1);
+				TPD_DEBUG(KERN_ERR "[msg2133]---X:%d, Y:%d; i=%d \n", touchData.Point[i].X, touchData.Point[i].Y, i);
 			}
 
-     mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
+			input_sync( tpd->dev );
+		}
+	}
+
+	mt65xx_eint_unmask(CUST_EINT_TOUCH_PANEL_NUM); 
 	 return 0;
  }
  

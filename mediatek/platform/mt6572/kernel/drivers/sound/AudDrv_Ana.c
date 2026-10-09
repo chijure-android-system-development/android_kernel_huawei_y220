@@ -57,6 +57,7 @@
 #define AUDIO_USING_WRAP_DRIVER
 #ifdef AUDIO_USING_WRAP_DRIVER
 #include <mach/mt_pmic_wrap.h>
+#include <mach/pmic_mt6323_sw.h>
 #endif
 
 /*****************************************************************************
@@ -65,18 +66,14 @@
 
 void Ana_Set_Reg(uint32 offset,uint32 value,uint32 mask)
 {
-    // set pmic register or analog CONTROL_IFACE_PATH
-    int ret =0;
 #ifdef AUDIO_USING_WRAP_DRIVER
-    uint32 Reg_Value = Ana_Get_Reg(offset);
-    Reg_Value &= (~mask);
-    Reg_Value |= (value&mask);
-    ret =pwrap_write( offset, Reg_Value);
-    Reg_Value = Ana_Get_Reg(offset);
-    if((Reg_Value&mask)!=(value&mask))
-    {
-        printk("Ana_Set_Reg offset= 0x%x , value = 0x%x mask = 0x%x ret = %d Reg_Value = 0x%x\n",offset,value,mask,ret,Reg_Value);
-    }
+    /*
+     * pwrap_wacs2 returns before a write is taken by the PMIC. Reading
+     * the register immediately afterwards overwrites WACS2_CMD, so the
+     * write never lands and the readback echoes the value just queued.
+     * pmic_config_interface leaves the write as the last command.
+     */
+    pmic_config_interface(offset, value & mask, mask, 0);
 #endif
 }
 

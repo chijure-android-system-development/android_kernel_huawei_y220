@@ -1538,6 +1538,81 @@ static unsigned int mtkfb_user_v2p(unsigned int va)
 }
 #endif
 
+/* MTKFB_NO_M4U uses physical addresses. The camera HAL passes a
+ * userspace VA and a zero phy, so translate that VA here. */
+static unsigned int mtkfb_va_to_pa(unsigned int va)
+{
+    unsigned int pageOffset;
+    pgd_t *pgd;
+    pmd_t *pmd;
+    pte_t *pte;
+    unsigned int pa;
+
+    if (!va || !current->mm)
+        return 0;
+    pageOffset = va & (PAGE_SIZE - 1);
+    pgd = pgd_offset(current->mm, va);
+    if (pgd_none(*pgd) || pgd_bad(*pgd))
+        return 0;
+    pmd = pmd_offset(pgd, va);
+    if (pmd_none(*pmd))
+        return 0;
+    pte = pte_offset_map(pmd, va);
+    if (!pte || !pte_present(*pte)) {
+        if (pte)
+            pte_unmap(pte);
+        return 0;
+    }
+    pa = (pte_val(*pte) & PAGE_MASK) | pageOffset;
+    pte_unmap(pte);
+    return pa;
+}
+
+/* DISP_OVL is virtual. The camera passes a userspace VA and phy 0.
+ * Programming the CPU physical address makes the port fault and the
+ * preview stays green. Reuse one MVA per buffer. */
+struct mtkfb_ovl_mva {
+    unsigned int va;
+    unsigned int mva;
+    unsigned int size;
+    pid_t tgid;
+};
+static struct mtkfb_ovl_mva mtkfb_ovl_mvas[8];
+
+static unsigned int mtkfb_get_ovl_mva(unsigned int va, unsigned int size)
+{
+    int i, slot = -1;
+    unsigned int mva = 0;
+    pid_t tgid = current->tgid;
+
+    if (!va || !size)
+        return 0;
+    for (i = 0; i < 8; i++) {
+        if (mtkfb_ovl_mvas[i].mva &&
+            mtkfb_ovl_mvas[i].va == va &&
+            mtkfb_ovl_mvas[i].size == size &&
+            mtkfb_ovl_mvas[i].tgid == tgid)
+            return mtkfb_ovl_mvas[i].mva;
+        if (slot < 0 && !mtkfb_ovl_mvas[i].mva)
+            slot = i;
+    }
+    if (slot < 0) {
+        slot = 0;
+        if (mtkfb_ovl_mvas[0].mva)
+            m4u_dealloc_mva(M4U_CLNTMOD_DISP, mtkfb_ovl_mvas[0].va,
+                            mtkfb_ovl_mvas[0].size, mtkfb_ovl_mvas[0].mva);
+        mtkfb_ovl_mvas[0].mva = 0;
+    }
+    if (m4u_alloc_mva(M4U_CLNTMOD_DISP, va, size, 0, 0, &mva) || !mva)
+        return 0;
+    mtkfb_ovl_mvas[slot].va = va;
+    mtkfb_ovl_mvas[slot].mva = mva;
+    mtkfb_ovl_mvas[slot].size = size;
+    mtkfb_ovl_mvas[slot].tgid = tgid;
+    printk("[mtkfb] overlay mva 0x%x va 0x%x size %u\n", mva, va, size);
+    return mva;
+}
+
 static int mtkfb_set_overlay_layer(struct fb_info *info, struct fb_overlay_layer* layerInfo)
 {
     struct mtkfb_device *fbdev = (struct mtkfb_device *)info->par;
@@ -1684,7 +1759,21 @@ static int mtkfb_set_overlay_layer(struct fb_info *info, struct fb_overlay_layer
     cached_layer_config[id].vaddr = layerInfo->src_base_addr;
     cached_layer_config[id].security = layerInfo->security;
 #if defined(MTKFB_NO_M4U)
-    LCD_CHECK_RET(LCD_LayerSetAddress(id, (unsigned int)layerInfo->src_phy_addr));
+    {
+        unsigned int pa = (unsigned int)layerInfo->src_phy_addr;
+        if (pa == 0) {
+            unsigned int size = layerInfo->src_pitch * layerpitch * layerInfo->src_height;
+            pa = mtkfb_get_ovl_mva((unsigned int)layerInfo->src_base_addr, size);
+        }
+        if (pa == 0) {
+            printk("[mtkfb] layer %u va 0x%x has no mva\n",
+                   id, (unsigned int)layerInfo->src_base_addr);
+            LCD_CHECK_RET(LCD_LayerEnable(id, 0));
+            ret = 0;
+            goto LeaveOverlayMode;
+        }
+        LCD_CHECK_RET(LCD_LayerSetAddress(id, pa));
+    }
 #else
 #if defined(MTK_M4U_SUPPORT)
     if(FB_LAYER != id && (FB_LAYER + 1) != id){
@@ -1705,7 +1794,12 @@ static int mtkfb_set_overlay_layer(struct fb_info *info, struct fb_overlay_layer
             goto LeaveOverlayMode;
         }
         else
-            layer_addr = searched_node->src_mva;	
+            layer_addr = searched_node->src_mva;
+        if (layer_addr == 0) {
+            LCD_CHECK_RET(LCD_LayerEnable(id, 0));
+            ret = 0;
+            goto LeaveOverlayMode;
+        }
     }
     else{
         u4OvlPhyAddr = (unsigned int)(layerInfo->src_phy_addr);
@@ -2568,7 +2662,7 @@ static int mtkfb_ioctl(struct file *file, struct fb_info *info, unsigned int cmd
 		else
 		{
 			struct fb_overlay_buffer_list *c,*n;
-			unsigned int overlay_mva;
+			unsigned int overlay_mva = 0;
 			if(overlay_buffer.src_vir_addr == 0)
 			{
 				printk("[mtkfb_ioctl Error]MTKFB_REGISTER_OVERLAYBUFFER VA should not be 0x00000000\n");
@@ -2610,7 +2704,21 @@ static int mtkfb_ioctl(struct file *file, struct fb_info *info, unsigned int cmd
     		}
 			sem_early_suspend_cnt--;
             DISP_AllocOverlayMva(overlay_buffer.src_vir_addr, &overlay_mva, overlay_buffer.size);
+			/* LCD M4U is not programmed on this panel, so AllocOverlayMva
+			 * leaves the address at 0. The overlay engine is still in
+			 * physical mode; use the buffer's physical page. */
+			if (overlay_mva == 0)
+				overlay_mva = mtkfb_user_v2p(overlay_buffer.src_vir_addr);
 			printk("[mtkfb_ioctl]MTKFB_REGISTER_OVERLAYBUFFER,allocated mva = 0x%x\n", overlay_mva);
+			if (overlay_mva == 0) {
+				printk("[mtkfb_ioctl] overlay buffer has no physical address\n");
+				vfree(n);
+				sem_flipping_cnt++;
+				sem_early_suspend_cnt++;
+				up(&sem_early_suspend);
+				up(&sem_flipping);
+				return -EINVAL;
+			}
 			n->src_mva = overlay_mva;
 			n->buffer.src_vir_addr = overlay_buffer.src_vir_addr;
 			n->buffer.size = overlay_buffer.size;

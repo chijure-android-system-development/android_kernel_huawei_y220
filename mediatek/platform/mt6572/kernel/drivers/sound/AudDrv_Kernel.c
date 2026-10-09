@@ -2115,9 +2115,7 @@ static long AudDrv_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
                 return -EFAULT;
             }
             AudDrv_ANA_Clk_On();
-            spin_lock(&auddrv_lock);
             Ana_Set_Reg(Reg_Data.offset,Reg_Data.value,Reg_Data.mask);
-            spin_unlock(&auddrv_lock);
             AudDrv_ANA_Clk_Off();
             break;
         }

@@ -59,6 +59,7 @@
 
 #elif defined (CONFIG_ARCH_MT6572)
 #include <mach/mt_pwm.h>
+#include <mach/mt_gpio.h>
 #include <mach/upmu_common_sw.h>
 #include <mach/upmu_hw.h>
 //#include <mach/mt_pmic_feature_api.h>
@@ -2057,6 +2058,19 @@ static int mt65xx_led_set_cust(struct cust_mt65xx_led *cust, int level)
 }
 
 #elif defined CONFIG_ARCH_MT6572
+static int brightness_set_gpio(int gpio_num, int level)
+{
+	mt_set_gpio_mode(gpio_num, GPIO_MODE_GPIO);
+	mt_set_gpio_dir(gpio_num, GPIO_DIR_OUT);
+
+	if (level)
+		mt_set_gpio_out(gpio_num, GPIO_OUT_ONE);
+	else
+		mt_set_gpio_out(gpio_num, GPIO_OUT_ZERO);
+
+	return 0;
+}
+
 static int mt65xx_led_set_cust(struct cust_mt65xx_led *cust, int level)
 {
 	struct nled_setting led_tmp_setting = {0, 0, 0};
@@ -2124,7 +2138,7 @@ static int mt65xx_led_set_cust(struct cust_mt65xx_led *cust, int level)
 			return 1;
           
 		case MT65XX_LED_MODE_GPIO:
-			return ((cust_set_brightness)(cust->data))(level);
+			return brightness_set_gpio(cust->data, level);
               
 		case MT65XX_LED_MODE_PMIC:
 			return brightness_set_pmic(cust->data, level, bl_div);

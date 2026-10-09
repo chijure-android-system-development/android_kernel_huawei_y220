@@ -44,7 +44,7 @@ CONFIG_KPD_PMIC_LPRST_TD=1
 # CONFIG_USB_STORAGE is not set
 # CONFIG_SOUND is not set
 # CONFIG_SND is not set
-# CONFIG_MTK_SOUND is not set
+CONFIG_MTK_SOUND=y
 # CONFIG_HID is not set
 # CONFIG_USB_HID is not set
 # CONFIG_USB_KBD is not set

@@ -254,7 +254,7 @@ int OVLLayerConfig(unsigned int layer,
     if((source == OVL_LAYER_SOURCE_MEM && addr == 0))
     {
         printk("error: source from memory, but addr is 0! \n");
-        ASSERT(0);                           // direct link support YUV444 only
+        return -1;
     }
 
     switch (fmt) {
